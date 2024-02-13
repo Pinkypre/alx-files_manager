@@ -1,37 +1,70 @@
+/* eslint-disable */
 import { MongoClient } from 'mongodb';
 
-const HOST = process.env.DB_HOST || 'localhost';
-const PORT = process.env.DB_PORT || 27017;
-const DATABASE = process.env.DB_DATABASE || 'files_manager';
-
-const url = `mongodb://${HOST}:${PORT}`;
-
 class DBClient {
-  constructor() {
-    this.client = new MongoClient(url, { useUnifiedTopology: true, useNewUrlParser: true });
-    this.client.connect().then(() => {
-      this.db = this.client.db(`${DATABASE}`);
-    }).catch((err) => {
-      console.log(err);
-    });
-  }
+    constructor() {
+        const host = process.env.DB_HOST || 'localhost';
+        const port = process.env.DB_PORT || 27017;
+        const database = process.env.DB_DATABASE || 'files_manager';
 
-  isAlive() {
-    return this.client.isConnected();
-  }
+        const uri = `mongodb://${host}:${port}/${database}`;
 
-  async nbUsers() {
-    const users = this.db.collection('users');
-    const usersNum = await users.countDocuments();
-    return usersNum;
-  }
+        this.client = new MongoClient(uri, { useUnifiedTopology: true });
 
-  async nbFiles() {
-    const files = this.db.collection('files');
-    const filesNum = await files.countDocuments();
-    return filesNum;
-  }
+        this.client.connect((err) => {
+            if (err) {
+                console.error('DB connection error:', err);
+            } else {
+                console.log('Connected to MongoDB');
+            }
+        });
+    }
+
+    async getUserByEmailAndPassword(email, hashedPassword) {
+        const db = this.client.db();
+        const usersCollection = db.collection('users');
+        return usersCollection.findOne({ email, password: hashedPassword });
+    }
+
+    async getUserById(userId) {
+        const db = this.client.db();
+        const usersCollection = db.collection('users');
+        return usersCollection.findOne({ _id: ObjectId(userId) });
+    }
+
+    async getUserByEmail(email) {
+        const db = this.client.db();
+        const usersCollection = db.collection('users');
+        return usersCollection.findOne({ email });
+    }
+
+    async createUser(email, hashedPassword) {
+        const db = this.client.db();
+        const usersCollection = db.collection('users');
+        const newUser = {
+            email,
+            password: hashedPassword,
+        };
+        const result = await usersCollection.insertOne(newUser);
+        return result.ops[0];
+    }
+
+    isAlive() {
+        return this.client.isConnected();
+    }
+
+    async nbUsers() {
+        const db = this.client.db();
+        const usersCollection = db.collection('users');
+        return usersCollection.countDocuments();
+    }
+
+    async nbFiles() {
+        const db = this.client.db();
+        const filesCollection = db.collection('files');
+        return filesCollection.countDocuments();
+    }
 }
 
 const dbClient = new DBClient();
-module.exports = dbClient;
+export default dbClient;
