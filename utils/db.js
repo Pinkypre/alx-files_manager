@@ -1,72 +1,35 @@
-/* eslint-disable */
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
+import { MongoClient } from 'mongodb';
 
-dotenv.config();
+const HOST = process.env.DB_HOST || 'localhost';
+const PORT = process.env.DB_PORT || 27017;
+const DATABASE = process.env.DB_DATABASE || 'files_manager';
 
-const { DB_HOST = '127.0.0.1', DB_PORT = 27017, DB_DATABASE = 'files_manager' } = process.env;
-const url = `mongodb://${DB_HOST}:${DB_PORT}/${DB_DATABASE}`;
-
-const userSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  password: {
-    type: String,
-    required: true,
-  },
-});
-
-const filesSchema = new mongoose.Schema({
-  userId: { type: String, required: true },
-  name: { type: String, required: true },
-  type: { type: String, required: true },
-  isPublic: { type: Boolean, default: false },
-  parentId: { type: String, default: '0' },
-  localPath: { type: String },
-});
+const url = `mongodb://${HOST}:${PORT}`;
 
 class DBClient {
   constructor() {
-    this.connect();
-    this.users = mongoose.model('User', userSchema);
-    this.files = mongoose.model('File', filesSchema);
+    this.client = new MongoClient(url, { useUnifiedTopology: true, useNewUrlParser: true });
+    this.client.connect().then(() => {
+      this.db = this.client.db(`${DATABASE}`);
+    }).catch((err) => {
+      console.log(err);
+    });
   }
 
-  async connect() {
-    try {
-      await mongoose.connect(url, { useNewUrlParser: true, useUnifiedTopology: true });
-      console.log('Connected to MongoDB');
-    } catch (error) {
-      console.error('Error connecting to MongoDB:', error);
-      process.exit(1);
-    }
-  }
-
-  async isAlive() {
-    return mongoose.connection.readyState === 1;
+  isAlive() {
+    return this.client.isConnected();
   }
 
   async nbUsers() {
-    try {
-      const count = await this.users.countDocuments();
-      return count;
-    } catch (error) {
-      console.error('Error retrieving the number of users:', error);
-      throw error;
-    }
+    const users = this.db.collection('users');
+    const usersNum = await users.countDocuments();
+    return usersNum;
   }
 
   async nbFiles() {
-    try {
-      const count = await this.files.countDocuments();
-      return count;
-    } catch (error) {
-      console.error('Error retrieving the number of files:', error);
-      throw error;
-    }
+    const files = this.db.collection('files');
+    const filesNum = await files.countDocuments();
+    return filesNum;
   }
 }
 
