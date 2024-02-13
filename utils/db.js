@@ -1,70 +1,72 @@
-/* eslint-disable */
-import { MongoClient } from 'mongodb';
+#!/usr/bin/node
+
+const { MongoClient } = require('mongodb');
+const mongo = require('mongodb');
+const { pwdHashed } = require('./utils');
 
 class DBClient {
-    constructor() {
-        const host = process.env.DB_HOST || 'localhost';
-        const port = process.env.DB_PORT || 27017;
-        const database = process.env.DB_DATABASE || 'files_manager';
+  constructor() {
+    const host = (process.env.DB_HOST) ? process.env.DB_HOST : 'localhost';
+    const port = (process.env.DB_PORT) ? process.env.DB_PORT : 27017;
+    this.database = (process.env.DB_DATABASE) ? process.env.DB_DATABASE : 'files_manager';
+    const dbUrl = `mongodb://${host}:${port}`;
+    this.connected = false;
+    this.client = new MongoClient(dbUrl, { useUnifiedTopology: true });
+    this.client.connect().then(() => {
+      this.connected = true;
+    }).catch((err) => console.log(err.message));
+  }
 
-        const uri = `mongodb://${host}:${port}/${database}`;
+  isAlive() {
+    return this.connected;
+  }
 
-        this.client = new MongoClient(uri, { useUnifiedTopology: true });
+  async nbUsers() {
+    await this.client.connect();
+    const users = await this.client.db(this.database).collection('users').countDocuments();
+    return users;
+  }
 
-        this.client.connect((err) => {
-            if (err) {
-                console.error('DB connection error:', err);
-            } else {
-                console.log('Connected to MongoDB');
-            }
-        });
+  async nbFiles() {
+    await this.client.connect();
+    const users = await this.client.db(this.database).collection('files').countDocuments();
+    return users;
+  }
+
+  async createUser(email, password) {
+    const hashedPwd = pwdHashed(password);
+    await this.client.connect();
+    const user = await this.client.db(this.database).collection('users').insertOne({ email, password: hashedPwd });
+    return user;
+  }
+
+  async getUser(email) {
+    await this.client.connect();
+    const user = await this.client.db(this.database).collection('users').find({ email }).toArray();
+    if (!user.length) {
+      return null;
     }
+    return user[0];
+  }
 
-    async getUserByEmailAndPassword(email, hashedPassword) {
-        const db = this.client.db();
-        const usersCollection = db.collection('users');
-        return usersCollection.findOne({ email, password: hashedPassword });
+  async getUserById(id) {
+    const _id = new mongo.ObjectID(id);
+    await this.client.connect();
+    const user = await this.client.db(this.database).collection('users').find({ _id }).toArray();
+    if (!user.length) {
+      return null;
     }
+    return user[0];
+  }
 
-    async getUserById(userId) {
-        const db = this.client.db();
-        const usersCollection = db.collection('users');
-        return usersCollection.findOne({ _id: ObjectId(userId) });
+  async userExist(email) {
+    const user = await this.getUser(email);
+    if (user) {
+      return true;
     }
-
-    async getUserByEmail(email) {
-        const db = this.client.db();
-        const usersCollection = db.collection('users');
-        return usersCollection.findOne({ email });
-    }
-
-    async createUser(email, hashedPassword) {
-        const db = this.client.db();
-        const usersCollection = db.collection('users');
-        const newUser = {
-            email,
-            password: hashedPassword,
-        };
-        const result = await usersCollection.insertOne(newUser);
-        return result.ops[0];
-    }
-
-    isAlive() {
-        return this.client.isConnected();
-    }
-
-    async nbUsers() {
-        const db = this.client.db();
-        const usersCollection = db.collection('users');
-        return usersCollection.countDocuments();
-    }
-
-    async nbFiles() {
-        const db = this.client.db();
-        const filesCollection = db.collection('files');
-        return filesCollection.countDocuments();
-    }
+    return false;
+  }
 }
 
 const dbClient = new DBClient();
-export default dbClient;
+module.exports = dbClient;
